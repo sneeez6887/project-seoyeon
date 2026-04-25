@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Operation: Cosmic Celebration</title>
+  <meta name="description" content="아스트로파지로부터 빼앗긴 생일 기억을 로키와 함께 복구하는 인터랙티브 우주 어드벤처." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- BGM — single audio element (most reliable for autoplay) -->
+  <audio id="bgm-audio" src="assets/intro.mp3" loop preload="auto"></audio>
+
+  <!-- ═══════════════════════════════════════
+       BACKGROUND LAYER
+  ═══════════════════════════════════════ -->
+  <div id="bg-layer"></div>
+
+  <!-- WHITE-OUT OVERLAY -->
+  <div id="whiteout-overlay"></div>
+
+  <!-- SCANLINE OVERLAY (always on) -->
+  <div id="scanlines"></div>
+
+  <!-- ═══════════════════════════════════════
+       AUDIO START SCREEN
+  ═══════════════════════════════════════ -->
+  <div id="screen-audio-start" class="screen active">
+    <div class="audio-start-inner">
+      <div id="audio-start-text" class="audio-start-text"></div>
+      <div id="audio-start-hint" class="audio-start-hint" style="display:none;">CLICK</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       INTRO SCREEN
+  ═══════════════════════════════════════ -->
+  <div id="screen-intro" class="screen">
+    <div class="intro-bottom">
+      <button id="btn-start" class="pixel-btn glow-btn">
+        <span class="btn-label">▶ SYSTEM BOOT</span>
+        <span class="btn-sub">[ Click to Start ]</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       STAGE 0 — AWAKENING
+  ═══════════════════════════════════════ -->
+  <div id="screen-stage0" class="screen">
+    <!-- Rocky UI -->
+    <div id="rocky-panel" class="rocky-panel">
+      <div class="rocky-avatar">
+        <img src="assets/rocky.gif" alt="Rocky" id="rocky-gif" />
+        <div class="rocky-name-tag">ROCKY</div>
+      </div>
+      <div class="terminal-box" id="terminal-box">
+        <div class="terminal-header">
+          <span class="term-dot red"></span>
+          <span class="term-dot yellow"></span>
+          <span class="term-dot green"></span>
+          <span class="term-title">ROCKY_COMM v1.0</span>
+        </div>
+        <div class="terminal-body">
+          <div id="rocky-text" class="rocky-typewriter"></div>
+          <span id="cursor-blink" class="cursor-blink">█</span>
+        </div>
+        <div class="terminal-footer" id="terminal-footer" style="display:none;">
+          <span class="term-prompt">▼ 화면을 클릭하여 계속...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stage 0 → Stage 1 trigger -->
+    <div id="stage0-click-overlay" class="stage0-click-overlay" style="display:none;">
+      <div class="click-hint-banner">
+        <span class="click-hint-arrow">▼</span>
+        <span class="click-hint-text">화면 어디든 클릭하세요</span>
+        <span class="click-hint-arrow">▼</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       STAGE 1 — SYSTEM RECOVERY (TYPING)
+  ═══════════════════════════════════════ -->
+  <div id="screen-stage1" class="screen">
+    <!-- Rocky UI (reused) -->
+    <div id="rocky-panel-s1" class="rocky-panel rocky-stage">
+      <div class="rocky-avatar">
+        <img src="assets/rocky.gif" alt="Rocky" />
+        <div class="rocky-name-tag">ROCKY</div>
+      </div>
+      <div class="terminal-box" id="terminal-box-s1">
+        <div class="terminal-header">
+          <span class="term-dot red"></span>
+          <span class="term-dot yellow"></span>
+          <span class="term-dot green"></span>
+          <span class="term-title">ROCKY_COMM v1.0</span>
+        </div>
+        <div class="terminal-body">
+          <div id="rocky-text-s1" class="rocky-typewriter"></div>
+          <span id="cursor-blink-s1" class="cursor-blink">█</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Password Input Terminal -->
+    <div id="password-terminal" class="password-terminal" style="display:none;">
+      <div class="pw-terminal-noise" id="noise-lines"></div>
+      <div class="pw-terminal-inner">
+        <div class="pw-header">
+          <span class="glitch-text" data-text="SYS://MEMORY.CORE">SYS://MEMORY.CORE</span>
+        </div>
+        <div class="pw-body">
+          <div class="pw-line">STATUS: <span class="danger blink-text">◉ CORRUPTED</span></div>
+          <div class="pw-line">DECRYPTION KEY REQUIRED</div>
+          <div class="pw-line pw-gap">▸ ORIGIN DATE CODE:</div>
+          <div class="pw-input-row">
+            <span class="pw-prompt">root@astropolis:~$</span>
+            <input type="text"
+                   id="pw-input"
+                   class="pw-input"
+                   maxlength="4"
+                   placeholder="____"
+                   autocomplete="off"
+                   spellcheck="false" />
+          </div>
+          <div class="pw-hint">[ Enter 4-digit code ]</div>
+          <div id="pw-error" class="pw-error" style="display:none;">◉ ACCESS DENIED — CODE MISMATCH</div>
+          <div id="pw-success" class="pw-success" style="display:none;">◉ ACCESS GRANTED — RESTORING POWER...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       MAIN MAP  (placeholder — later stages)
+  ═══════════════════════════════════════ -->
+  <div id="screen-mainmap" class="screen">
+    <!-- Slot HUD -->
+    <div id="slot-hud" class="slot-hud">
+      <div class="slot-label">MEMORY FRAGMENTS</div>
+      <div class="slot-row">
+        <div class="slot-item" id="slot-1" data-label="ORIGIN">
+          <div class="slot-icon">◈</div>
+          <div class="slot-name">ORIGIN</div>
+        </div>
+        <div class="slot-item locked" id="slot-2" data-label="HARMONY">
+          <div class="slot-icon">◈</div>
+          <div class="slot-name">HARMONY</div>
+        </div>
+        <div class="slot-item locked" id="slot-3" data-label="WARMTH">
+          <div class="slot-icon">◈</div>
+          <div class="slot-name">WARMTH</div>
+        </div>
+        <div class="slot-item locked" id="slot-4" data-label="HEART">
+          <div class="slot-icon">◈</div>
+          <div class="slot-name">HEART</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stage click zones -->
+    <div id="map-zones">
+      <!-- Epsilon Eridani: upper-left star in map asset -->
+      <div class="map-zone" id="zone-s2" data-stage="2" style="top:28%; left:25%;">
+        <div class="zone-ping"></div>
+        <div class="zone-label">Epsilon Eridani</div>
+      </div>
+      <!-- Proxima Centauri: right side star -->
+      <div class="map-zone locked" id="zone-s3" data-stage="3" style="top:56%; left:86%;">
+        <div class="zone-ping"></div>
+        <div class="zone-label">Proxima Centauri</div>
+      </div>
+      <!-- Tau Ceti: center-lower star with exclamation mark -->
+      <div class="map-zone locked" id="zone-s4" data-stage="4" style="top:73%; left:69%;">
+        <div class="zone-ping"></div>
+        <div class="zone-label">Tau Ceti</div>
+      </div>
+    </div>
+
+    <!-- Map Rocky message -->
+    <div id="map-rocky" class="map-rocky-bubble">
+      <img src="assets/rocky.gif" alt="Rocky" class="map-rocky-gif" />
+      <div class="map-bubble">
+        <div class="map-bubble-text" id="map-bubble-text">기지 복구 완료! 성도를 확인해라, 친구!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       STAGE 2 — FREQUENCY RESONANCE (MIC)
+  ═══════════════════════════════════════ -->
+  <div id="screen-stage2" class="screen">
+    <canvas id="waveform-canvas" class="abs-canvas"></canvas>
+    <div id="stage2-hud" class="stage2-hud" style="display:none;">
+      <div class="resonance-row">
+        <span class="resonance-label">◉ RESONANCE LOCK</span>
+        <span id="resonance-pct" class="resonance-pct">0%</span>
+      </div>
+      <div class="resonance-track"><div id="resonance-fill" class="resonance-fill"></div></div>
+    </div>
+    <div id="rocky-panel-s2" class="rocky-panel rocky-stage">
+      <div class="rocky-avatar"><img src="assets/rocky.gif" alt="Rocky"/><div class="rocky-name-tag">ROCKY</div></div>
+      <div class="terminal-box">
+        <div class="terminal-header"><span class="term-dot red"></span><span class="term-dot yellow"></span><span class="term-dot green"></span><span class="term-title">ROCKY_COMM v1.0</span></div>
+        <div class="terminal-body"><div id="rocky-text-s2" class="rocky-typewriter"></div><span id="cursor-blink-s2" class="cursor-blink">█</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       STAGE 3 — SCRATCH (MOUSE INTERACTION)
+  ═══════════════════════════════════════ -->
+  <div id="screen-stage3" class="screen">
+    <div class="s3-envelope-wrap" id="s3-envelope-wrap">
+      <div class="s3-envelope">
+        <div class="env-flap"></div>
+        <div class="env-body">
+          <div class="env-lines"><span></span><span></span><span></span></div>
+          <div class="env-stamp">♥</div>
+        </div>
+      </div>
+      <div class="env-hint">+ 카드가 숨어있다 +</div>
+    </div>
+    <canvas id="scratch-canvas" class="scratch-canvas"></canvas>
+    <div id="scratch-hud" class="scratch-hud" style="display:none;">
+      <span class="scratch-label">◉ CIRCUIT RESTORED:</span>
+      <span id="scratch-pct">0</span>%
+    </div>
+    <div id="rocky-panel-s3" class="rocky-panel rocky-stage">
+      <div class="rocky-avatar"><img src="assets/rocky.gif" alt="Rocky"/><div class="rocky-name-tag">ROCKY</div></div>
+      <div class="terminal-box">
+        <div class="terminal-header"><span class="term-dot red"></span><span class="term-dot yellow"></span><span class="term-dot green"></span><span class="term-title">ROCKY_COMM v1.0</span></div>
+        <div class="terminal-body"><div id="rocky-text-s3" class="rocky-typewriter"></div><span id="cursor-blink-s3" class="cursor-blink">█</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       STAGE 4 — HAND TRACKING
+  ═══════════════════════════════════════ -->
+  <div id="screen-stage4" class="screen">
+    <video id="webcam-video" class="webcam-video" autoplay playsinline muted></video>
+    <canvas id="particle-s4-canvas" class="abs-canvas"></canvas>
+    <canvas id="handpose-canvas" class="abs-canvas"></canvas>
+    <div id="heart-gauge" class="heart-gauge" style="display:none;">
+      <div class="heart-gauge-label">💗 HEART SYNC</div>
+      <div class="heart-gauge-track"><div id="heart-gauge-fill" class="heart-gauge-fill"></div></div>
+      <div id="heart-gauge-pct" class="heart-gauge-pct">0%</div>
+    </div>
+    <div id="rocky-panel-s4" class="rocky-panel rocky-stage">
+      <div class="rocky-avatar"><img src="assets/rocky.gif" alt="Rocky"/><div class="rocky-name-tag">ROCKY</div></div>
+      <div class="terminal-box">
+        <div class="terminal-header"><span class="term-dot red"></span><span class="term-dot yellow"></span><span class="term-dot green"></span><span class="term-title">ROCKY_COMM v1.0</span></div>
+        <div class="terminal-body"><div id="rocky-text-s4" class="rocky-typewriter"></div><span id="cursor-blink-s4" class="cursor-blink">█</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       ENDING — 탄생: 가장 밝은 별
+  ═══════════════════════════════════════ -->
+  <div id="screen-ending" class="screen">
+    <div id="fireworks-container" class="fireworks-container"></div>
+    <div id="rocky-panel-ending" class="rocky-panel rocky-stage" style="display:none;">
+      <div class="rocky-avatar"><img src="assets/rocky.gif" alt="Rocky"/><div class="rocky-name-tag">ROCKY</div></div>
+      <div class="terminal-box">
+        <div class="terminal-header"><span class="term-dot red"></span><span class="term-dot yellow"></span><span class="term-dot green"></span><span class="term-title">ROCKY_COMM v1.0</span></div>
+        <div class="terminal-body"><div id="rocky-text-ending" class="rocky-typewriter"></div><span id="cursor-blink-ending" class="cursor-blink">█</span></div>
+      </div>
+    </div>
+    <div id="star-wars-wrap" class="star-wars-wrap" style="display:none;">
+      <div class="star-wars-perspective">
+        <div class="star-wars-inner">
+          <p class="sw-title">Happy Birthday!</p>
+          <p class="sw-name">SeoYeon ✦</p>
+          <div class="sw-divider">— ✦ —</div>
+          <div class="sw-body">
+            <p>생일 축하해, 서연아.</p>
+            <br/>
+            <p>[추후 수정 예정]</p>
+            <br/>
+            <p>서연아, 오늘 하루만큼은 우주 어딘가에서</p>
+            <p>로키도 너의 생일을 기억하고 있을 거야.</p>
+            <br/>
+            <p>늘 건강하고 빛나기를.</p>
+            <br/>
+            <p>— with love —</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       CANVAS LAYER (p5.js / particles)
+  ═══════════════════════════════════════ -->
+  <div id="canvas-layer"></div>
+
+  <script src="main.js"></script>
+</body>
+</html>
