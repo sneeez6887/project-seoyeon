@@ -391,7 +391,7 @@ const FINAL_LETTER = [
   '디지털로 줄 수 있는 게 마땅치 않아서 한 번 준비해 보았다!',
   '',
   '원래는 너가 갈 때부터 ‘이때쯤이면 한국을 그리워하겠지’라고 생각해서',
-  '한국의 소리와 이미지들(ex. 놀이터에서 뛰노는 아이들)을 담아주려고 했는데',
+  '선물로 한국의 소리와 이미지들(ex. 놀이터에서 뛰노는 아이들)을 담아주려고 했는데',
   '너무 잘 적응해서 그런 거 같진 않더라고 허허',
   '물론 다행인 일이지만 말이야~',
   '',
@@ -416,8 +416,8 @@ const FINAL_LETTER = [
   '한 번 내용을 유추해보길!',
   '',
   '작년엔 22년간 넓어진 너의 우주가 나의 우주가 맞닿아서',
-  '그때 해온 팽창과는 다르게 팽창을 하고 있는데,',
-  '너도 나도 만족하는 방향인 거 같아서 정말 기뻐',
+  '여지껏 해온 팽창과는 다른 속력과 방향으로 팽창을 하고 있는데,',
+  '너도 나도 만족하는 팽창인 거 같아서 정말 기뻐',
   '',
   '앞으로도 새롭게 다양한 모습으로 너와 나의 우주에',
   '기쁨과 행복을, 슬픔이 있더라도 넓은 우주 안의 우리의 일부이겠거니 하며',
@@ -489,6 +489,8 @@ const game = {
   activeBgmIndex: 0,
   bgmFadeToken: 0,
   currentMusicSrc: '',
+  imageCache: new Map(),
+  bgToken: 0,
   contaminationCleared: false,
   celebrationEnergyComplete: false,
   reportRevealed: false,
@@ -674,7 +676,7 @@ function ensureAudio() {
 function resumeAudioContext() {
   try {
     const ctx = ensureAudio();
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    if (ctx.state === 'suspended') ctx.resume().catch(() => { });
     return ctx;
   } catch (error) {
     console.warn('Audio resume failed', error);
@@ -845,14 +847,55 @@ function showRockyNudge(event, state = game.state) {
 
 function setBackground(state) {
   const url = ASSETS.image[state];
+  const token = ++game.bgToken;
   document.body.dataset.state = state;
-  dom.bgLayer.style.backgroundImage = url ? `url("${url}")` : '';
   dom.bgLayer.style.opacity = '1';
   dom.bgLayer.style.filter = state === 'BOOT' || state === 'BOOT_SHEET' || state === 'SYSTEM_BOOT'
     ? 'none'
     : state === 'PHASE_6_CELEBRATION' || state === 'ENDING_LETTER'
-    ? 'saturate(1.12) brightness(1.04)'
-    : 'saturate(1.02) brightness(0.95)';
+      ? 'saturate(1.12) brightness(1.04)'
+      : 'saturate(1.02) brightness(0.95)';
+  if (!url) {
+    dom.bgLayer.style.backgroundImage = '';
+    return;
+  }
+  const cssUrl = `url("${url}")`;
+  if (!dom.bgLayer.style.backgroundImage) {
+    dom.bgLayer.style.backgroundImage = cssUrl;
+  }
+  preloadImage(url).then(() => {
+    if (token === game.bgToken) {
+      dom.bgLayer.style.backgroundImage = cssUrl;
+    }
+  });
+}
+
+function preloadImage(src) {
+  const full = new URL(src, window.location.href).href;
+  if (game.imageCache.has(full)) return game.imageCache.get(full);
+  const promise = new Promise(resolve => {
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => {
+      if (image.decode) {
+        image.decode().catch(() => null).then(resolve);
+      } else {
+        resolve();
+      }
+    };
+    image.onerror = () => {
+      console.warn('Image preload failed', src);
+      resolve();
+    };
+    image.src = full;
+  });
+  game.imageCache.set(full, promise);
+  return promise;
+}
+
+function preloadImages() {
+  const uniqueSources = Array.from(new Set(Object.values(ASSETS.image).filter(Boolean)));
+  uniqueSources.forEach(src => preloadImage(src));
 }
 
 function getMusicVolume(state) {
@@ -2851,6 +2894,7 @@ document.addEventListener('fullscreenchange', () => {
   window.requestAnimationFrame(resizeFx);
 });
 
+preloadImages();
 setBackground('BOOT_SHEET');
 syncViewportHeight();
 resizeFx();

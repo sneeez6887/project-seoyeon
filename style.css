@@ -1,4 +1,10 @@
 @font-face {
+  font-family: GalmuriPixel;
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-10@1.0/Galmuri11.woff") format("woff");
+  font-display: swap;
+}
+
+@font-face {
   font-family: PixelLocal;
   src: url("assets/fonts/pixel-font.woff2") format("woff2");
   font-display: swap;
@@ -20,8 +26,8 @@
   --violet: #b88cff;
   --white: #e8f6ff;
   --muted: rgba(232, 246, 255, 0.62);
-  --font-pixel: PixelLocal, "Courier New", monospace;
-  --font-ui: "Courier New", monospace;
+  --font-pixel: GalmuriPixel, PixelLocal, "Courier New", monospace;
+  --font-ui: GalmuriPixel, PixelLocal, "Courier New", monospace;
   --viewport-h: 100dvh;
   --rocky-reserve: clamp(300px, 48dvh, 560px);
   --dock-reserve: 186px;
@@ -45,8 +51,11 @@ body {
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
+  font-family: var(--font-pixel);
 }
 
 .hidden {
@@ -716,7 +725,10 @@ body[data-ui-mode="evidence"] .rocky-dialogue {
 
 .rocky-avatar {
   display: grid;
+  grid-template-rows: auto auto;
   gap: 0.35rem;
+  align-self: start;
+  align-content: start;
   justify-items: center;
 }
 
@@ -724,16 +736,20 @@ body[data-ui-mode="evidence"] .rocky-dialogue {
   width: 96px;
   height: 96px;
   aspect-ratio: 1;
-  object-fit: cover;
+  object-fit: contain;
   border: 2px solid var(--cyan);
   background: rgba(0, 0, 0, 0.7);
 }
 
 .rocky-avatar span {
+  display: block;
+  width: 100%;
   color: var(--cyan);
   font-family: var(--font-pixel);
   font-size: 0.72rem;
   letter-spacing: 0;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .dialogue-box {
