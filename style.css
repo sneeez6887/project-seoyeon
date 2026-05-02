@@ -32,6 +32,8 @@
   --rocky-reserve: clamp(300px, 48dvh, 560px);
   --dock-reserve: 186px;
   --hud-clearance: clamp(7.1rem, 14dvh, 8.6rem);
+  --play-top: var(--hud-clearance);
+  --play-bottom: var(--rocky-reserve);
 }
 
 html,
@@ -440,7 +442,7 @@ h1 {
   width: 100%;
   height: var(--viewport-h);
   overflow: hidden;
-  padding: var(--hud-clearance) 0.75rem var(--rocky-reserve);
+  padding: var(--play-top) 0.75rem var(--play-bottom);
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -492,7 +494,7 @@ h1 {
 
 .interaction-zone {
   position: absolute;
-  inset: var(--hud-clearance) 0 var(--rocky-reserve) 0;
+  inset: var(--play-top) 0 var(--play-bottom) 0;
   z-index: 2;
   display: grid;
   place-items: center;
@@ -508,6 +510,26 @@ h1 {
 
 .interaction-zone > :not(.inline-help) {
   grid-row: 1;
+  justify-self: center;
+  align-self: center;
+  margin-block: auto;
+}
+
+.interaction-zone > .center-cue,
+.interaction-zone > .core-grid,
+.interaction-zone > .log-grid,
+.interaction-zone > .choice-grid,
+.interaction-zone > .route-grid,
+.interaction-zone > .coordinate-panel,
+.interaction-zone > .signal-panel,
+.interaction-zone > .scratch-wrap,
+.interaction-zone > .drag-stage,
+.interaction-zone > .letter-panel,
+.interaction-zone > .cake-panel,
+.interaction-zone > .camera-heart-panel,
+.interaction-zone > .celebration-title,
+.interaction-zone > .hold-panel {
+  justify-self: center;
   align-self: center;
 }
 
@@ -766,7 +788,8 @@ body[data-ui-mode="evidence"] .rocky-dialogue {
   width: 96px;
   height: 96px;
   aspect-ratio: 1;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center;
   border: 2px solid var(--cyan);
   background: rgba(0, 0, 0, 0.7);
 }
@@ -1173,14 +1196,14 @@ body[data-ui-mode="evidence"] .rocky-dialogue {
 }
 
 .camera-heart-panel {
-  position: absolute;
-  left: 50%;
-  top: 50%;
+  position: relative;
+  left: auto;
+  top: auto;
   width: min(72vw, 680px);
   max-height: min(58dvh, 520px);
   justify-self: center;
   align-self: center;
-  transform: translate(-50%, -50%);
+  transform: none;
   display: grid;
   gap: 0.55rem;
   padding: 0.7rem;
@@ -1373,7 +1396,7 @@ body[data-ui-mode="evidence"] .rocky-dialogue {
   }
 
   .visual-panel {
-    padding: var(--hud-clearance) 0.65rem var(--rocky-reserve);
+    padding: var(--play-top) 0.65rem var(--play-bottom);
   }
 
   .mission-title,
@@ -1382,7 +1405,7 @@ body[data-ui-mode="evidence"] .rocky-dialogue {
   }
 
   .interaction-zone {
-    inset: var(--hud-clearance) 0 var(--rocky-reserve);
+    inset: var(--play-top) 0 var(--play-bottom);
     padding: 0.65rem;
   }
 

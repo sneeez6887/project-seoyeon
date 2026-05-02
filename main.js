@@ -2314,7 +2314,7 @@ function runCameraHeartOverlay(video, canvas, confirm, copy) {
       copy.textContent = '손 신호 안정. 손하트가 보이면 신호를 확정해라.';
     } else if (smoothHand) {
       confirm.disabled = true;
-      copy.textContent = '손만 추적 중. 선이 손 윤곽을 따라가면 조금 유지해라.';
+      copy.textContent = '손 후보만 추적 중. 얼굴 영역은 잠금 처리했다.';
     } else {
       confirm.disabled = true;
       copy.textContent = '얼굴 영역은 무시한다. 손을 화면 중앙 아래쪽에 보여줘라.';
@@ -2325,6 +2325,7 @@ function runCameraHeartOverlay(video, canvas, confirm, copy) {
 }
 
 function detectHandOnlyRegion(frame, previous, width, height) {
+  if (!previous) return null;
   let total = 0;
   let sx = 0;
   let sy = 0;
@@ -2337,17 +2338,16 @@ function detectHandOnlyRegion(frame, previous, width, height) {
     for (let x = 0; x < width; x += 2) {
       const nx = x / width;
       const ny = y / height;
-      const faceZone = nx > 0.28 && nx < 0.72 && ny < 0.58;
-      if (faceZone || ny < 0.16) continue;
+      const faceZone = nx > 0.18 && nx < 0.82 && ny > 0.04 && ny < 0.68;
+      const allowedHandZone = ny > 0.62 || ((nx < 0.28 || nx > 0.72) && ny > 0.24);
+      if (faceZone || !allowedHandZone) continue;
       const i = (y * width + x) * 4;
       const r = frame[i];
       const g = frame[i + 1];
       const b = frame[i + 2];
       const skin = r > 72 && g > 42 && b > 26 && r > b * 1.12 && r > g * 0.82 && Math.max(r, g, b) - Math.min(r, g, b) > 18;
-      const motion = previous
-        ? Math.abs(r - previous[i]) + Math.abs(g - previous[i + 1]) + Math.abs(b - previous[i + 2])
-        : 0;
-      const handCandidate = skin && (motion > 18 || ny > 0.46 || nx < 0.24 || nx > 0.76);
+      const motion = Math.abs(r - previous[i]) + Math.abs(g - previous[i + 1]) + Math.abs(b - previous[i + 2]);
+      const handCandidate = skin && motion > 26;
       if (!handCandidate) continue;
       const weight = 1 + Math.min(5, motion / 28);
       total += weight;
@@ -2360,7 +2360,10 @@ function detectHandOnlyRegion(frame, previous, width, height) {
       if (samples.length < 90 && (x + y) % 6 === 0) samples.push({ x: nx, y: ny });
     }
   }
-  if (total < 52 || maxX - minX < 7 || maxY - minY < 7) return null;
+  const boxW = maxX - minX;
+  const boxH = maxY - minY;
+  const boxAreaRatio = (boxW * boxH) / (width * height);
+  if (total < 44 || boxW < 7 || boxH < 7 || boxAreaRatio > 0.22) return null;
   return {
     x: sx / total / width,
     y: sy / total / height,
