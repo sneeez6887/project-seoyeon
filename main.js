@@ -477,6 +477,7 @@ const game = {
   handHeartPoints: [],
   handHeartCenter: null,
   handHeartReadyAt: 0,
+  handHeartStableFrames: 0,
   signalCleared: false,
   signalSyncStarted: false,
   signalHoldTimer: 0,
@@ -1485,18 +1486,28 @@ async function clearPower() {
 
 function revealPartyBlocker() {
   return new Promise(resolve => {
-    dom.zone.innerHTML = `
-      <div class="center-cue cold rocky-blocker">
-        <div>MODULE_03: █████_LIGHT_ARRAY ONLINE</div>
-        <img class="pixel-art" src="assets/images/rocky.gif" alt="Rocky blocking the log" />
-        <button class="pixel-btn secondary">로키를 치워서 로그 확인</button>
-      </div>
+    setUiMode('interaction');
+    const blocker = document.createElement('div');
+    blocker.className = 'center-cue cold rocky-blocker';
+    blocker.innerHTML = `
+      <div>MODULE_03: <span class="covered-word">█████</span>_LIGHT_ARRAY ONLINE</div>
+      <img class="pixel-art" src="assets/images/rocky.gif" alt="Rocky blocking the log" />
+      <button class="pixel-btn secondary">로키를 치워서 로그 확인</button>
     `;
-    const btn = dom.zone.querySelector('button');
-    btn.addEventListener('click', async () => {
+    dom.zone.replaceChildren(blocker);
+    let opened = false;
+    const open = async () => {
+      if (opened) return;
+      opened = true;
+      blocker.classList.add('moved');
       await sayRocky('hideParty');
       resolve();
-    }, { once: true });
+    };
+    blocker.querySelector('button').addEventListener('click', open);
+    blocker.querySelector('img').addEventListener('click', open);
+    blocker.addEventListener('pointerup', event => {
+      if (!event.target.closest('button')) open();
+    });
   });
 }
 
@@ -2231,8 +2242,9 @@ async function startCameraHeart() {
     video.srcObject = game.cameraStream;
     await video.play();
     copy.textContent = '카메라 연결됨. 손을 움직이면 하트 입자가 따라간다.';
-    game.handHeartPoints = makeHandHeartParticles(46);
+    game.handHeartPoints = makeHandHeartParticles(52);
     game.handHeartCenter = null;
+    game.handHeartStableFrames = 0;
     game.handHeartReadyAt = performance.now() + 2600;
     runCameraHeartOverlay(video, canvas, confirm, copy);
   } catch (error) {
@@ -2263,12 +2275,11 @@ function makeHandHeartParticles(count) {
 function runCameraHeartOverlay(video, canvas, confirm, copy) {
   const ctx = canvas.getContext('2d');
   const sample = document.createElement('canvas');
-  sample.width = 96;
-  sample.height = 54;
+  sample.width = 128;
+  sample.height = 72;
   const sampleCtx = sample.getContext('2d', { willReadFrequently: true });
   let previous = null;
-  let smoothX = 0.5;
-  let smoothY = 0.5;
+  let smoothHand = null;
   const resize = () => {
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -2281,61 +2292,159 @@ function runCameraHeartOverlay(video, canvas, confirm, copy) {
     if (!document.body.contains(canvas) || !game.cameraStream) return;
     const rect = canvas.getBoundingClientRect();
     ctx.clearRect(0, 0, rect.width, rect.height);
+    let hand = null;
     if (video.readyState >= 2) {
       sampleCtx.drawImage(video, 0, 0, sample.width, sample.height);
       const frame = sampleCtx.getImageData(0, 0, sample.width, sample.height).data;
-      if (previous) {
-        let total = 0;
-        let sx = 0;
-        let sy = 0;
-        for (let y = 0; y < sample.height; y += 2) {
-          for (let x = 0; x < sample.width; x += 2) {
-            const i = (y * sample.width + x) * 4;
-            const diff = Math.abs(frame[i] - previous[i]) + Math.abs(frame[i + 1] - previous[i + 1]) + Math.abs(frame[i + 2] - previous[i + 2]);
-            if (diff > 34) {
-              total += diff;
-              sx += x * diff;
-              sy += y * diff;
-            }
-          }
-        }
-        if (total > 9000) {
-          smoothX = smoothX * 0.84 + (sx / total / sample.width) * 0.16;
-          smoothY = smoothY * 0.84 + (sy / total / sample.height) * 0.16;
-        }
-      }
+      hand = detectHandOnlyRegion(frame, previous, sample.width, sample.height);
       previous = new Uint8ClampedArray(frame);
     }
-    const center = {
-      x: rect.width * (1 - smoothX),
-      y: rect.height * Math.min(0.72, Math.max(0.24, smoothY)),
-    };
-    drawHandHeartOverlay(ctx, rect, center);
-    if (performance.now() > game.handHeartReadyAt) {
+    if (hand) {
+      const mapped = mapHandRegionToCanvas(hand, rect);
+      smoothHand = smoothHand
+        ? smoothHandRegion(smoothHand, mapped)
+        : mapped;
+      game.handHeartStableFrames += 1;
+    } else {
+      game.handHeartStableFrames = Math.max(0, game.handHeartStableFrames - 2);
+    }
+    drawHandHeartOverlay(ctx, rect, smoothHand, game.handHeartStableFrames > 10);
+    if (performance.now() > game.handHeartReadyAt && game.handHeartStableFrames > 28) {
       confirm.disabled = false;
-      copy.textContent = '하트 입자 정렬 완료. 손하트가 보이면 신호를 확정해라.';
+      copy.textContent = '손 신호 안정. 손하트가 보이면 신호를 확정해라.';
+    } else if (smoothHand) {
+      confirm.disabled = true;
+      copy.textContent = '손만 추적 중. 선이 손 윤곽을 따라가면 조금 유지해라.';
+    } else {
+      confirm.disabled = true;
+      copy.textContent = '얼굴 영역은 무시한다. 손을 화면 중앙 아래쪽에 보여줘라.';
     }
     game.cameraFrame = requestAnimationFrame(loop);
   };
   loop();
 }
 
-function drawHandHeartOverlay(ctx, rect, center) {
+function detectHandOnlyRegion(frame, previous, width, height) {
+  let total = 0;
+  let sx = 0;
+  let sy = 0;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  const samples = [];
+  for (let y = 0; y < height; y += 2) {
+    for (let x = 0; x < width; x += 2) {
+      const nx = x / width;
+      const ny = y / height;
+      const faceZone = nx > 0.28 && nx < 0.72 && ny < 0.58;
+      if (faceZone || ny < 0.16) continue;
+      const i = (y * width + x) * 4;
+      const r = frame[i];
+      const g = frame[i + 1];
+      const b = frame[i + 2];
+      const skin = r > 72 && g > 42 && b > 26 && r > b * 1.12 && r > g * 0.82 && Math.max(r, g, b) - Math.min(r, g, b) > 18;
+      const motion = previous
+        ? Math.abs(r - previous[i]) + Math.abs(g - previous[i + 1]) + Math.abs(b - previous[i + 2])
+        : 0;
+      const handCandidate = skin && (motion > 18 || ny > 0.46 || nx < 0.24 || nx > 0.76);
+      if (!handCandidate) continue;
+      const weight = 1 + Math.min(5, motion / 28);
+      total += weight;
+      sx += x * weight;
+      sy += y * weight;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+      if (samples.length < 90 && (x + y) % 6 === 0) samples.push({ x: nx, y: ny });
+    }
+  }
+  if (total < 52 || maxX - minX < 7 || maxY - minY < 7) return null;
+  return {
+    x: sx / total / width,
+    y: sy / total / height,
+    minX: minX / width,
+    minY: minY / height,
+    maxX: maxX / width,
+    maxY: maxY / height,
+    samples,
+  };
+}
+
+function mapHandRegionToCanvas(hand, rect) {
+  return {
+    x: rect.width * (1 - hand.x),
+    y: rect.height * hand.y,
+    minX: rect.width * (1 - hand.maxX),
+    maxX: rect.width * (1 - hand.minX),
+    minY: rect.height * hand.minY,
+    maxY: rect.height * hand.maxY,
+    samples: hand.samples.map(point => ({
+      x: rect.width * (1 - point.x),
+      y: rect.height * point.y,
+    })),
+  };
+}
+
+function smoothHandRegion(previous, next) {
+  const mix = 0.22;
+  return {
+    x: previous.x + (next.x - previous.x) * mix,
+    y: previous.y + (next.y - previous.y) * mix,
+    minX: previous.minX + (next.minX - previous.minX) * mix,
+    maxX: previous.maxX + (next.maxX - previous.maxX) * mix,
+    minY: previous.minY + (next.minY - previous.minY) * mix,
+    maxY: previous.maxY + (next.maxY - previous.maxY) * mix,
+    samples: next.samples,
+  };
+}
+
+function drawHandHeartOverlay(ctx, rect, hand, forming) {
   const points = game.handHeartPoints.length ? game.handHeartPoints : makeHandHeartParticles(46);
   game.handHeartPoints = points;
   const scale = Math.min(rect.width, rect.height) / 360;
+  const now = performance.now();
+  const fallbackCenter = { x: rect.width * 0.5, y: rect.height * 0.58 };
+  const center = hand ? { x: hand.x, y: hand.y } : fallbackCenter;
   ctx.save();
   ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(255, 211, 106, 0.62)';
-  ctx.setLineDash([8, 8]);
-  ctx.strokeRect(center.x - 110 * scale, center.y - 92 * scale, 220 * scale, 184 * scale);
-  ctx.setLineDash([]);
+  if (hand) {
+    ctx.strokeStyle = 'rgba(92, 236, 255, 0.82)';
+    ctx.strokeRect(hand.minX, hand.minY, hand.maxX - hand.minX, hand.maxY - hand.minY);
+    ctx.beginPath();
+    hand.samples.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.strokeStyle = 'rgba(255, 225, 106, 0.72)';
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 214, 232, 0.68)';
+    for (let i = 0; i < hand.samples.length; i += 12) {
+      const point = hand.samples[i];
+      ctx.beginPath();
+      ctx.moveTo(center.x, center.y);
+      ctx.lineTo(point.x, point.y);
+      ctx.stroke();
+    }
+  } else {
+    ctx.strokeStyle = 'rgba(255, 211, 106, 0.36)';
+    ctx.setLineDash([8, 8]);
+    ctx.strokeRect(center.x - 110 * scale, center.y - 92 * scale, 220 * scale, 184 * scale);
+    ctx.setLineDash([]);
+  }
   ctx.beginPath();
   points.forEach((point, index) => {
-    const targetX = center.x + point.tx * scale;
-    const targetY = center.y + point.ty * scale;
-    point.x += (targetX - point.x) * 0.12;
-    point.y += (targetY - point.y) * 0.12;
+    if (!point.x && !point.y) {
+      point.x = randomRange(rect.width * 0.18, rect.width * 0.82);
+      point.y = randomRange(rect.height * 0.18, rect.height * 0.82);
+    }
+    const driftX = rect.width * (0.5 + Math.cos(now / 1200 + point.phase) * 0.26);
+    const driftY = rect.height * (0.5 + Math.sin(now / 1500 + point.phase) * 0.24);
+    const targetX = forming ? center.x + point.tx * scale : driftX;
+    const targetY = forming ? center.y + point.ty * scale : driftY;
+    point.x += (targetX - point.x) * (forming ? 0.12 : 0.018);
+    point.y += (targetY - point.y) * (forming ? 0.12 : 0.018);
     if (index === 0) ctx.moveTo(point.x, point.y);
     else ctx.lineTo(point.x, point.y);
   });
@@ -2344,13 +2453,13 @@ function drawHandHeartOverlay(ctx, rect, center) {
   ctx.stroke();
   points.forEach(point => {
     ctx.fillStyle = point.color;
-    ctx.globalAlpha = 0.78 + Math.sin(performance.now() / 220 + point.phase) * 0.18;
+    ctx.globalAlpha = 0.72 + Math.sin(now / 220 + point.phase) * 0.18;
     drawHeart(ctx, point.x, point.y, point.size * scale);
   });
   ctx.globalAlpha = 1;
   ctx.fillStyle = 'rgba(92, 236, 255, 0.82)';
   for (let i = 0; i < 10; i += 1) {
-    const angle = (Math.PI * 2 * i) / 10 + performance.now() / 1400;
+    const angle = (Math.PI * 2 * i) / 10 + now / 1400;
     const x = center.x + Math.cos(angle) * 145 * scale;
     const y = center.y + Math.sin(angle) * 102 * scale;
     ctx.fillRect(x - 2, y - 2, 4, 4);
